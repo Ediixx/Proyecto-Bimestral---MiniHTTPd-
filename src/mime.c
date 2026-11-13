@@ -2,6 +2,7 @@
 
 #include <string.h>
 
+/* cada extension con su tipo mime */
 struct mime {
   const char *ext;
   const char *type;
@@ -13,14 +14,15 @@ static struct mime tabla[] = {
     {".js", "application/javascript"},
     {".png", "image/png"},
     {".jpg", "image/jpeg"},
-    {NULL, NULL} /* Marca el final de la tabla */
+    {NULL, NULL} /* marca donde termina la tabla */
 };
 
+/* busca la extension del archivo y devuelve su Content-Type */
 const char *mime_type(const char *path) {
   const char *ext;
   int i;
 
-  ext = strrchr(path, '.'); /* Último punto: "www/style.css" -> ".css" */
+  ext = strrchr(path, '.'); /* ultimo punto: "www/style.css" -> ".css" */
   if (ext == NULL)
     return "application/octet-stream";
 
@@ -29,5 +31,6 @@ const char *mime_type(const char *path) {
       return tabla[i].type;
   }
 
-  return "application/octet-stream"; /* Tipo desconocido: datos binarios */
+  /* si no esta en la tabla lo mandamos como binario generico */
+  return "application/octet-stream";
 }

@@ -18,29 +18,32 @@ int main(int argc, char *argv[]) {
   int portno = 80;
   int sd, nsd, epfd, nfds, i, fd;
 
+  /* si pasan el puerto por argumento lo usamos, sino queda el 80 */
   if (argc >= 2)
     portno = atoi(argv[1]);
 
+  /* los puertos solo van de 1 a 65535 */
   if (portno <= 0 || portno > 65535) {
     fprintf(stderr, "Uso: %s [puerto]\n", argv[0]);
     return 1;
   }
 
-  /* Si el cliente cierra mientras le enviamos datos, write() devuelve -1
-     en vez de matar el proceso con la señal SIGPIPE */
+  /* si el cliente se desconecta mientras le mandamos datos el servidor
+     se caia por la señal SIGPIPE, con esto la ignoramos */
   signal(SIGPIPE, SIG_IGN);
 
-  /* Socket maestro */
+  /* socket maestro (el que escucha) */
   sd = server_init(portno, QLEN);
 
-  /* 1. Crear la instancia de epoll */
+  /* 1. creamos el epoll */
   epfd = epoll_create1(0);
   if (epfd < 0) {
     perror("ERROR en epoll_create1");
     return 1;
   }
 
-  /* 2. Registrar el socket maestro: EPOLLIN = hay un cliente esperando */
+  /* 2. metemos el socket maestro al epoll, EPOLLIN avisa cuando llega un
+     cliente nuevo */
   ev.events = EPOLLIN;
   ev.data.fd = sd;
   if (epoll_ctl(epfd, EPOLL_CTL_ADD, sd, &ev) < 0) {
@@ -50,20 +53,23 @@ int main(int argc, char *argv[]) {
 
   printf("Servidor escuchando en el puerto %d\n", portno);
 
-  /* 3. Bucle de eventos */
+  /* 3. bucle principal de eventos */
   while (1) {
-    /* Duerme hasta que algún socket tenga algo; -1 = sin límite de tiempo */
+    /* se queda esperando hasta que algun socket tenga algo, el -1 es que
+       espere sin limite de tiempo */
     nfds = epoll_wait(epfd, events, MAX_EVENTS, -1);
     if (nfds < 0) {
       perror("ERROR en epoll_wait");
       continue;
     }
 
+    /* recorremos solo los sockets que tienen eventos */
     for (i = 0; i < nfds; i++) {
       fd = events[i].data.fd;
 
       if (fd == sd) {
-        /* Evento en el maestro: aceptar al cliente y registrarlo en epoll */
+        /* evento en el maestro = cliente nuevo, lo aceptamos y lo metemos
+           al epoll */
         clilen = sizeof(cli_addr);
         nsd = accept(sd, (struct sockaddr *)&cli_addr, &clilen);
         if (nsd < 0) {
@@ -74,14 +80,14 @@ int main(int argc, char *argv[]) {
         ev.data.fd = nsd;
         epoll_ctl(epfd, EPOLL_CTL_ADD, nsd, &ev);
       } else {
-        /* Evento en un cliente: llegó una solicitud (o se desconectó).
-           handle_client devuelve 0 si hay que cerrar la conexión */
+        /* evento en un cliente = mando una peticion o se desconecto.
+           handle_client devuelve 0 si hay q cerrar la conexion */
         if (handle_client(fd) == 0) {
           epoll_ctl(epfd, EPOLL_CTL_DEL, fd, NULL);
           close(fd);
         }
-        /* Si devuelve 1 (keep-alive) el socket sigue en epoll
-           esperando la siguiente solicitud del mismo cliente */
+        /* si devuelve 1 (keep-alive) no cerramos, el socket sigue en el
+           epoll esperando la otra peticion del mismo cliente */
       }
     }
   }
