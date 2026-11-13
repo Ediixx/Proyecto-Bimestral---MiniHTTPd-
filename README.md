@@ -1,7 +1,7 @@
 # minihttpd: Servidor Web HTTP/1.1 en C
 
 **Asignatura:** Computación Distribuida  
-**Proyecto:** Implementación de Servidor Web Monohilo de Alto Rendimiento  
+**Proyecto:** Implementación de Servidor Web Monohilo 
 **Entorno de Operación:** Linux / WSL (Ubuntu 24.04 LTS)  
 **Estándar de Lenguaje:** C11 (GNU Compiler Collection - GCC)  
 
@@ -45,23 +45,23 @@ minihttpd/
 
 | Módulo / Archivo | Rol en la Arquitectura |
 | :--- | :--- |
-| **`include/server.h` / `src/server.c`** | Encapsula la lógica de red: inicialización de la estructura `sockaddr_in`, configuración de `SO_REUSEADDR` y el bucle de aceptación de conexiones entrantes. |
-| **`include/http.h` / `src/http.c`** | Implementa la máquina de estados para interpretar la línea de petición (`METHOD`, `URI`, `VERSION`) y despachar la respuesta con los encabezados correspondientes. |
-| **`include/mime.h` / `src/mime.c`** | Asigna el encabezado `Content-Type` adecuado (`text/html`, `text/css`, `image/png`, etc.) analizando la extensión del recurso solicitado. |
-| **`include/files.h` / `src/files.c`** | Controla el acceso seguro al sistema de archivos dentro de `www/`, verificando existencia, permisos, tamaño (`Content-Length`) y transmisión en bloques. |
-| **`src/main.c`** | Valida los parámetros de invocación (puerto), inicializa la señalética y cede el control al subsistema de red. 
+| **`include/server.h` / `src/server.c`** | Encapsula la inicialización del socket maestro: configuración de `sockaddr_in`, opción `SO_REUSEADDR`, `bind` y `listen`. |
+| **`include/http.h` / `src/http.c`** | Analiza la línea de petición (`METHOD`, `URI`, `VERSION`) y los encabezados (`Host`, `Connection`, `User-Agent`), controla conexiones persistentes (`keep-alive`) y genera las respuestas HTTP. |
+| **`include/mime.h` / `src/mime.c`** | Asigna el encabezado `Content-Type` adecuado (`text/html`, `text/css`, `application/javascript`, `image/png`, `image/jpeg`) analizando la extensión del recurso solicitado. |
+| **`include/files.h` / `src/files.c`** | Controla el acceso seguro al sistema de archivos dentro de `www/` usando `realpath()`, verifica existencia, permisos y tamaño (`Content-Length`), y transfiere los datos en bloques. |
+| **`src/main.c`** | Valida el puerto, ignora `SIGPIPE`, crea la instancia de `epoll` y ejecuta el bucle de eventos para atender múltiples clientes y conexiones persistentes. |
 
 ---
 
 ## 4. Compilación y Construcción
 
-El proyecto se compila con banderas de diagnóstico estricto (`-Wall`, `-Wextra`, `-Iinclude`):
+El proyecto se compila con banderas de diagnóstico estricto (`-Wall -Wextra -std=c11 -D_DEFAULT_SOURCE -Iinclude`):
 
 ```bash
 # Compilar el binario ejecutable
 make
 
-# Limpiar los objetos (.o) y el binario generado
+# Limpiar el binario generado
 make clean
 ```
 
@@ -69,11 +69,14 @@ make clean
 
 ## 5. Despliegue y Ejecución
 
-Por convención de la IANA, el protocolo HTTP opera sobre el **puerto 80**. Debido a que en sistemas POSIX los puertos inferiores a 1024 son catalogados como **privilegiados**, se requiere elevación de permisos (`sudo`):
+Por convención de la IANA, el protocolo HTTP opera sobre el **puerto 80**. Debido a que en sistemas POSIX los puertos inferiores a 1024 son catalogados como **privilegiados**, se requiere elevación de permisos (`sudo`). Opcionalmente se puede pasar otro puerto como argumento para pruebas sin `sudo`:
 
 ```bash
 # Ejecución en el puerto estándar HTTP (80)
 sudo ./minihttpd
+
+# Ejecución en un puerto alternativo (sin sudo)
+./minihttpd 8080
 ```
 
 ---
@@ -85,7 +88,7 @@ La implementación evalúa y garantiza la emisión de respuestas bajo los siguie
 | Código HTTP | Significado | Condición de Disparo |
 | :---: | :--- | :--- |
 | **`200 OK`** | Petición exitosa | El recurso solicitado existe en `www/`, tiene permisos de lectura y se transmite correctamente. |
-| **`400 Bad Request`** | Petición malformada | La trama enviada no cumple la sintaxis mínima de una petición HTTP (método o versión inválidos). |
+| **`400 Bad Request`** | Petición malformada | La trama enviada no cumple la sintaxis mínima de HTTP/1.1, falta el encabezado `Host`, la versión no es `HTTP/1.1`, o se excede el tamaño máximo de línea, encabezado o URI. |
 | **`403 Forbidden`** | Acceso prohibido | Se detecta un intento de navegación fuera del directorio raíz (`../`) o acceso a recursos restringidos. |
 | **`404 Not Found`** | Recurso no encontrado | La URI solicitada no coincide con ningún archivo dentro de `www/`. |
 | **`405 Method Not Allowed`** | Método no soportado | El cliente invoca un verbo distinto a `GET` (por ejemplo, `POST`, `PUT`, `DELETE`). |
@@ -134,20 +137,26 @@ curl -i -X POST http://localhost/index.html
   ```
 * **Resultado Esperado:** Código `400 Bad Request` y cierre ordenado de la conexión TCP, manteniendo el proceso del servidor activo.
 
-### 7.3 Simulación de Fallo de Permisos de I/O (*Fault Injection*)
-* **Vector:** Archivo existente pero inaccesible para lectura a nivel de llamadas al sistema (`fopen` retornando `EACCES`).
-* **Verificación:**
+### 7.3 Simulación de Fallo Interno / Permisos de I/O (*Fault Injection*)
+* **Vector:** Error inesperado al resolver la ruta raíz `www/` (retornando `500 Internal Server Error`) o archivo sin permisos de lectura (`open` retornando `EACCES` -> `403 Forbidden`).
+* **Verificación de `500 Internal Server Error` (funciona incluso con `sudo`):**
   ```bash
-  sudo touch www/restringido.txt && sudo chmod 000 www/restringido.txt
-  curl -i http://localhost/restringido.txt
-  sudo rm -f www/restringido.txt
+  mv www www_bak
+  curl -i http://localhost/index.html
+  mv www_bak www
   ```
-* **Resultado Esperado:** Código `500 Internal Server Error`, sin exposición de trazas ni rutas internas al cliente.
+* **Verificación de `403 Forbidden` por permisos (requiere ejecutar sin `sudo` en sistema de archivos nativo de Linux, no en `/mnt/c`):**
+  ```bash
+  touch www/restringido.txt && chmod 000 www/restringido.txt
+  curl -i http://localhost:8080/restringido.txt
+  rm -f www/restringido.txt
+  ```
+* **Resultado Esperado:** Código `500 Internal Server Error` cuando falla el acceso a `DocumentRoot`, o `403 Forbidden` cuando un archivo no tiene permisos de lectura (sin exponer trazas ni rutas internas).
 
 ### 7.4 Prueba de Resistencia por Desbordamiento (*Buffer Overflow / DoS*)
-* **Vector:** Envío de cadenas de URI sobredimensionadas para verificar la contención de los límites del búfer de lectura en memoria.
+* **Vector:** Envío de cadenas de URI sobredimensionadas para verificar la contención de los límites del búfer de lectura en memoria (`MAX_URI`, `MAX_LINE`, `BUFSZ`).
 * **Verificación:**
   ```bash
   python3 -c "import urllib.request; urllib.request.urlopen('http://localhost/' + 'A'*5000)"
   ```
-* **Resultado Esperado:** Retorno de código `400 Bad Request` o `414 URI Too Long`, conservando la estabilidad del servidor.
+* **Resultado Esperado:** Retorno de código `400 Bad Request` (Python mostrará `urllib.error.HTTPError: HTTP Error 400: Bad Request`), conservando la estabilidad del servidor.
