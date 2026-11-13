@@ -5,31 +5,20 @@
 **Entorno de Operación:** Linux / WSL (Ubuntu 24.04 LTS)  
 **Estándar de Lenguaje:** C11 (GNU Compiler Collection - GCC)  
 
----
-
-## 1. Resumen Ejecutivo
-`minihttpd` es un servidor web HTTP/1.1 monohilo desarrollado en lenguaje C estándar. El propósito del proyecto es explorar a bajo nivel los fundamentos de los sistemas distribuidos y la arquitectura cliente-servidor mediante la interfaz de sockets POSIX, el análisis sintáctico (*parsing*) del protocolo HTTP sin librerías externas, la gestión controlada del sistema de archivos y la implementación de controles de seguridad frente a vulnerabilidades comunes en servicios de red.
-
----
-
-## 2. Objetivos de Aprendizaje
+## 1. Objetivos de Aprendizaje
 * **Programación de Red con Sockets POSIX:** Creación, configuración, enlace (*bind*), escucha (*listen*) y aceptación (*accept*) de sockets TCP/IP.
 * **Procesamiento y Semántica del Protocolo HTTP:** Deserialización de peticiones (`Request Line`, encabezados) y ensamblado manual de tramas de respuesta bajo especificación HTTP/1.1.
 * **Modelo Concurrente y Gestión de Eventos:** Comprensión de arquitecturas de atención secuencial/event-driven en entornos monohilo.
 * **Manejo Seguro del Sistema de Archivos:** Lectura de recursos en disco, tipificación MIME para contenido estático (HTML, CSS) y binario (imágenes), así como prevención de fugas de descriptores de archivo.
 * **Seguridad Ofensiva/Defensiva en Redes:** Mitigación de desbordamiento de búfer (*Buffer Overflow*) y control de acceso contra escalamiento de rutas (*Path Traversal*).
 
----
-
-## 3. Requisitos del Entorno
+## 2. Requisitos del Entorno
 * **Sistema Operativo:** Distribución Linux (compatible con WSL Ubuntu 24.04 LTS o superior).
 * **Compilador:** `gcc` con soporte para estándar C11 y POSIX.
 * **Automatización de Construcción:** `make` (GNU Make 4.x o superior).
 * **Herramientas de Diagnóstico y Test:** `curl`, `netcat` (`nc`), `python3`.
 
----
-
-## 4. Estructura y Arquitectura del Proyecto
+## 3. Estructura y Arquitectura del Proyecto
 
 ```text
 minihttpd/
@@ -60,11 +49,11 @@ minihttpd/
 | **`include/http.h` / `src/http.c`** | Implementa la máquina de estados para interpretar la línea de petición (`METHOD`, `URI`, `VERSION`) y despachar la respuesta con los encabezados correspondientes. |
 | **`include/mime.h` / `src/mime.c`** | Asigna el encabezado `Content-Type` adecuado (`text/html`, `text/css`, `image/png`, etc.) analizando la extensión del recurso solicitado. |
 | **`include/files.h` / `src/files.c`** | Controla el acceso seguro al sistema de archivos dentro de `www/`, verificando existencia, permisos, tamaño (`Content-Length`) y transmisión en bloques. |
-| **`src/main.c`** | Valida los parámetros de invocación (puerto), inicializa la señalética y cede el control al subsistema de red. |
+| **`src/main.c`** | Valida los parámetros de invocación (puerto), inicializa la señalética y cede el control al subsistema de red. 
 
 ---
 
-## 5. Compilación y Construcción
+## 4. Compilación y Construcción
 
 El proyecto se compila con banderas de diagnóstico estricto (`-Wall`, `-Wextra`, `-Iinclude`):
 
@@ -78,7 +67,7 @@ make clean
 
 ---
 
-## 6. Despliegue y Ejecución
+## 5. Despliegue y Ejecución
 
 Por convención de la IANA, el protocolo HTTP opera sobre el **puerto 80**. Debido a que en sistemas POSIX los puertos inferiores a 1024 son catalogados como **privilegiados**, se requiere elevación de permisos (`sudo`):
 
@@ -89,7 +78,7 @@ sudo ./minihttpd
 
 ---
 
-## 7. Verificación Funcional y Matriz de Códigos de Estado
+## 6. Verificación Funcional y Matriz de Códigos de Estado
 
 La implementación evalúa y garantiza la emisión de respuestas bajo los siguientes códigos de estado de la RFC 7231 / 9110:
 
@@ -102,7 +91,7 @@ La implementación evalúa y garantiza la emisión de respuestas bajo los siguie
 | **`405 Method Not Allowed`** | Método no soportado | El cliente invoca un verbo distinto a `GET` (por ejemplo, `POST`, `PUT`, `DELETE`). |
 | **`500 Internal Server Error`** | Error interno del servidor | Fallos inesperados del sistema subyacente (por ejemplo, error en llamadas al sistema de I/O). |
 
-### 7.1 Protocolo de Pruebas Funcionales
+### 6.1 Protocolo de Pruebas Funcionales
 
 ```bash
 # 1. Petición GET estándar (200 OK)
@@ -123,9 +112,9 @@ curl -i -X POST http://localhost/index.html
 
 ---
 
-## 8. Batería de Pruebas de Seguridad y Robustez
+## 7. Pruebas de Seguridad y Robustez
 
-### 8.1 Mitigación de Salto de Directorio (*Path Traversal*)
+### 7.1 Mitigación de Salto de Directorio (*Path Traversal*)
 * **Vector de Ataque:** Secuencias relativas `../` o su codificación hexadecimal URL `%2e%2e%2f` con el fin de acceder a archivos confidenciales del sistema anfitrión (ej. `/etc/passwd`).
 * **Verificación:**
   ```bash
@@ -137,7 +126,7 @@ curl -i -X POST http://localhost/index.html
   ```
 * **Resultado Esperado:** Código `403 Forbidden` (o `404 Not Found`), bloqueando la resolución de ruta fuera de `www/`.
 
-### 8.2 Inyección de Peticiones Corruptas (*Malformed Requests*)
+### 7.2 Inyección de Peticiones Corruptas (*Malformed Requests*)
 * **Vector de Ataque:** Cargas útiles arbitrarias que buscan provocar fallos de segmentación (*Segmentation Fault*) al desreferenciar punteros nulos durante el *parsing*.
 * **Verificación:**
   ```bash
@@ -145,7 +134,7 @@ curl -i -X POST http://localhost/index.html
   ```
 * **Resultado Esperado:** Código `400 Bad Request` y cierre ordenado de la conexión TCP, manteniendo el proceso del servidor activo.
 
-### 8.3 Simulación de Fallo de Permisos de I/O (*Fault Injection*)
+### 7.3 Simulación de Fallo de Permisos de I/O (*Fault Injection*)
 * **Vector:** Archivo existente pero inaccesible para lectura a nivel de llamadas al sistema (`fopen` retornando `EACCES`).
 * **Verificación:**
   ```bash
@@ -155,7 +144,7 @@ curl -i -X POST http://localhost/index.html
   ```
 * **Resultado Esperado:** Código `500 Internal Server Error`, sin exposición de trazas ni rutas internas al cliente.
 
-### 8.4 Prueba de Resistencia por Desbordamiento (*Buffer Overflow / DoS*)
+### 7.4 Prueba de Resistencia por Desbordamiento (*Buffer Overflow / DoS*)
 * **Vector:** Envío de cadenas de URI sobredimensionadas para verificar la contención de los límites del búfer de lectura en memoria.
 * **Verificación:**
   ```bash
