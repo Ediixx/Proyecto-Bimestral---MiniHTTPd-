@@ -137,21 +137,15 @@ curl -i -X POST http://localhost/index.html
   ```
 * **Resultado Esperado:** Código `400 Bad Request` y cierre ordenado de la conexión TCP, manteniendo el proceso del servidor activo.
 
-### 7.3 Simulación de Fallo Interno / Permisos de I/O (*Fault Injection*)
-* **Vector:** Error inesperado al resolver la ruta raíz `www/` (retornando `500 Internal Server Error`) o archivo sin permisos de lectura (`open` retornando `EACCES` -> `403 Forbidden`).
-* **Verificación de `500 Internal Server Error` (funciona incluso con `sudo`):**
+### 7.3 Simulación de Fallo Interno de I/O (*Fault Injection*)
+* **Vector:** Error al intentar resolver el directorio raíz `www/` con `realpath()`, simulando un fallo interno de acceso al sistema de archivos.
+* **Verificación:**
   ```bash
   mv www www_bak
   curl -i http://localhost/index.html
   mv www_bak www
   ```
-* **Verificación de `403 Forbidden` por permisos (requiere ejecutar sin `sudo` en sistema de archivos nativo de Linux, no en `/mnt/c`):**
-  ```bash
-  touch www/restringido.txt && chmod 000 www/restringido.txt
-  curl -i http://localhost:8080/restringido.txt
-  rm -f www/restringido.txt
-  ```
-* **Resultado Esperado:** Código `500 Internal Server Error` cuando falla el acceso a `DocumentRoot`, o `403 Forbidden` cuando un archivo no tiene permisos de lectura (sin exponer trazas ni rutas internas).
+* **Resultado Esperado:** Código `500 Internal Server Error`, sin exposición de trazas ni rutas internas al cliente.
 
 ### 7.4 Prueba de Resistencia por Desbordamiento (*Buffer Overflow / DoS*)
 * **Vector:** Envío de cadenas de URI sobredimensionadas para verificar la contención de los límites del búfer de lectura en memoria (`MAX_URI`, `MAX_LINE`, `BUFSZ`).
